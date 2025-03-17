@@ -7,6 +7,16 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
+# Tampilkan menu
+show_menu() {
+    echo -e "\n${CYAN}=== GaiaNet Node Management ===${NC}"
+    echo -e "1️⃣  Prepare (Update & Install Dependencies)"
+    echo -e "2️⃣  Install Multiple Nodes"
+    echo -e "3️⃣  Start All Nodes"
+    echo -e "4️⃣  Show Node Info"
+    echo -e "5️⃣  Exit"
+}
+
 # Update sistem & install dependencies (hanya sekali)
 prepare_system() {
     echo -e "🔄 ${CYAN}Preparing system (update & install dependencies)...${NC}"
