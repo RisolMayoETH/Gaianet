@@ -1,4 +1,3 @@
-
 #!/bin/bash
 # Warna teks
 RED='\033[0;31m'
@@ -25,17 +24,17 @@ prepare_system() {
     apt-get update && apt-get upgrade -y
     apt install -y pciutils lsof curl nvtop btop jq wget unzip git nano
 
-    # Install CUDA Toolkit (hanya jika belum ada)
-    if ! command -v nvcc &> /dev/null; then
+    # Install CUDA Toolkit jika belum ada
+    if ! command -v nvcc &> /dev/null && lspci | grep -i nvidia &> /dev/null; then
         echo -e "🚀 ${GREEN}Installing CUDA Toolkit...${NC}"
         CUDA_KEYRING="cuda-keyring_1.1-1_all.deb"
-        wget "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/$CUDA_KEYRING"
+        wget -q "https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/$CUDA_KEYRING"
         dpkg -i $CUDA_KEYRING
         apt-get update
         apt-get install -y cuda-toolkit-12-8
         rm -f $CUDA_KEYRING
     else
-        echo -e "✅ ${YELLOW}CUDA Toolkit already installed, skipping...${NC}"
+        echo -e "✅ ${YELLOW}CUDA Toolkit already installed or no NVIDIA GPU detected, skipping...${NC}"
     fi
 
     echo -e "✅ ${GREEN}System preparation complete!${NC}"
@@ -70,13 +69,8 @@ install_multiple_nodes() {
         CONFIG_URL="https://raw.githubusercontent.com/GaiaNet-AI/node-configs/main/qwen-2.5-coder-7b-instruct_rustlang/config.json"
         CONFIG_FILE="$node_path/config.json"
 
-        wget -O "$CONFIG_FILE" "$CONFIG_URL"
-        jq '.chat = "https://huggingface.co/gaianet/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-3B-Instruct-Q5_K_M.gguf"' "$CONFIG_FILE" > tmp.json && mv tmp.json "$CONFIG_FILE"
-        jq '.chat_name = "Qwen2.5-Coder-3B-Instruct"' "$CONFIG_FILE" > tmp.json && mv tmp.json "$CONFIG_FILE"
-
-        # Cek apakah konfigurasi telah diperbarui
-        grep '"chat":' "$CONFIG_FILE"
-        grep '"chat_name":' "$CONFIG_FILE"
+        wget -q -O "$CONFIG_FILE" "$CONFIG_URL"
+        jq '.chat = "https://huggingface.co/gaianet/Qwen2.5-Coder-3B-Instruct-GGUF/resolve/main/Qwen2.5-Coder-3B-Instruct-Q5_K_M.gguf" | .chat_name = "Qwen2.5-Coder-3B-Instruct"' "$CONFIG_FILE" > tmp.json && mv tmp.json "$CONFIG_FILE"
 
         gaianet config --base "$node_path" --port "$port"
         gaianet init --base "$node_path"
@@ -94,7 +88,9 @@ start_all_nodes() {
     
     if [[ -n "$pids" ]]; then
         echo -e "🔴 Killing existing GaiaNet processes (PIDs: $pids)"
-        kill -9 $pids
+        kill $pids
+        sleep 3
+        kill -9 $pids 2>/dev/null
     else
         echo -e "✅ No existing GaiaNet processes found."
     fi
@@ -103,19 +99,23 @@ start_all_nodes() {
     
     base_dir="$HOME"
 
-    for node_path in "$base_dir"/gaia-*; do
-        if [[ -d "$node_path" ]]; then
-            echo -e "🟢 ${GREEN}Starting node: $(basename $node_path)...${NC}"
-            gaianet start --base "$node_path" &
-        fi
-    done
-    
-    echo -e "✅ ${GREEN}All nodes started successfully!${NC}"
+    if compgen -G "$base_dir/gaia-*" > /dev/null; then
+        for node_path in "$base_dir"/gaia-*; do
+            if [[ -d "$node_path" ]]; then
+                echo -e "🟢 ${GREEN}Starting node: $(basename $node_path)...${NC}"
+                screen -dmS "gaia_$(basename $node_path)" gaianet start --base "$node_path"
+            fi
+        done
+        echo -e "✅ ${GREEN}All nodes started successfully!${NC}"
+    else
+        echo -e "❌ ${RED}No nodes found to start.${NC}"
+    fi
 }
 
 # Tampilkan info node
 show_info() {
     echo -e "📡 ${CYAN}Displaying Node Info...${NC}"
+    
     base_dir="$HOME"
 
     for node_path in "$base_dir"/gaia-*; do
@@ -124,16 +124,6 @@ show_info() {
             gaianet info --base "$node_path"
         fi
     done
-}
-
-# Tampilkan menu
-show_menu() {
-    echo -e "\n${CYAN}=== GaiaNet Node Management ===${NC}"
-    echo -e "1️⃣  Prepare (Update & Install Dependencies)"
-    echo -e "2️⃣  Install Multiple Nodes"
-    echo -e "3️⃣  Start All Nodes"
-    echo -e "4️⃣  Show Node Info"
-    echo -e "5️⃣  Exit"
 }
 
 # Loop menu interaktif
